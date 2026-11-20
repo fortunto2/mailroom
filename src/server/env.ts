@@ -1,4 +1,5 @@
-import { env } from "cloudflare:workers";
+import { env, waitUntil } from "cloudflare:workers";
+import { mockAwsFetch } from "./aws/mock";
 import type { AwsConfig } from "./aws/ses";
 
 /** The deployment's configuration (wrangler.jsonc vars and secrets). */
@@ -55,6 +56,8 @@ export interface MailroomEnv {
 	EMAILABLE_MONTHLY_LIMIT?: string;
 	/** "false": never ask GitHub for new Mailroom releases (src/server/updates.ts). */
 	UPDATE_CHECK?: string;
+	/** "1": fake AWS locally (src/server/aws/mock.ts). Nothing is sent. Never in production. */
+	AWS_MOCK?: string;
 }
 
 export const cfg = () => env as unknown as MailroomEnv;
@@ -63,17 +66,38 @@ export const region = () => cfg().AWS_REGION || "us-east-1";
 export const timezone = () => cfg().TIMEZONE || "UTC";
 export const baseUrl = () => (cfg().BETTER_AUTH_URL ?? "").replace(/\/$/, "");
 
-export const awsConfigured = () => !!cfg().AWS_ACCESS_KEY_ID && !!cfg().AWS_SECRET_ACCESS_KEY;
+export const awsMocked = () => cfg().AWS_MOCK === "1";
+
+export const awsConfigured = () =>
+	awsMocked() || (!!cfg().AWS_ACCESS_KEY_ID && !!cfg().AWS_SECRET_ACCESS_KEY);
 
 /** Tests swap AWS's fetch for their own. */
 let fetcher: typeof fetch | undefined;
 export const setAwsFetcher = (f: typeof fetch | undefined) => {
 	fetcher = f;
 };
-export const awsFetcher = () => fetcher;
+let mockFetcher: typeof fetch | undefined;
+export const awsFetcher = () => {
+	if (fetcher || !awsMocked()) return fetcher;
+	mockFetcher ??= mockAwsFetch(
+		async (event, eventId) => {
+			const { applySesEvent } = await import("./events");
+			return applySesEvent(event as never, eventId);
+		},
+		1500,
+		waitUntil,
+	);
+	return mockFetcher;
+};
 
 export function aws(): AwsConfig {
 	const e = cfg();
+	if (awsMocked() && !fetcher)
+		return {
+			region: region(),
+			credentials: { accessKeyId: "AKIAMOCK", secretAccessKey: "mock" },
+			fetcher: awsFetcher(),
+		};
 	if (!e.AWS_ACCESS_KEY_ID || !e.AWS_SECRET_ACCESS_KEY)
 		throw new Error("AWS is not configured: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY");
 	return {
