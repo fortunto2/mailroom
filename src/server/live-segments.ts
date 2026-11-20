@@ -18,6 +18,9 @@ import { iso } from "./time";
  * engagement, which is scored in code and joined in after.
  */
 
+/** Rows of contact_segments per insert: 3 parameters each, under D1's 100. */
+const JOIN_ROWS = 33;
+
 const days = z.number().int().min(1).max(3650);
 const KEY = /^[A-Za-z0-9_.-]{1,64}$/;
 
@@ -364,12 +367,13 @@ export async function refreshSegment(
 	const joined = [...want].filter((id) => !have.has(id));
 	const left = [...have].filter((id) => !want.has(id));
 	const at = iso(now);
-	for (let i = 0; i < joined.length; i += 50)
+	// D1 binds at most 100 parameters a query: three a row.
+	for (let i = 0; i < joined.length; i += JOIN_ROWS)
 		await db
 			.insert(cs)
 			.values(
 				joined
-					.slice(i, i + 50)
+					.slice(i, i + JOIN_ROWS)
 					.map((contact_id) => ({ contact_id, segment_id: s.id, created_at: at })),
 			)
 			.onConflictDoNothing();
