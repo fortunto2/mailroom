@@ -9,3 +9,6 @@ dist
 # The live demo: its database and build are made in CI (demo/build-db.mjs, vite build)
 demo/public/demo.db*
 site/demo/
+.mailroom-config.json
+.wrangler.jsonc.orig
+deploy.sh
