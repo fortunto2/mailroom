@@ -458,6 +458,21 @@ describe("polls", () => {
 		const [r] = await pollResults(x.id, saved?.design);
 		expect(r).toMatchObject({ question: "Pool or beach?", total: 2 });
 		expect(r?.options.map((o) => o.votes)).toEqual([2, 0]);
+
+		// A contact with a reward gets it on the page for the FIRST answer only, in its language.
+		await db
+			.update(schema.contacts)
+			.set({ properties: { lang: "ru", reward_code: "ABC123", reward_url: "https://example.com/redeem?code={code}" } })
+			.where(eq(schema.contacts.id, ana.id));
+		const yes = await (await handlePoll(new Request(`${base}/p1/0`))).text();
+		expect(yes).toContain("ABC123");
+		expect(yes).toContain("https://example.com/redeem?code=ABC123");
+		expect(yes).toContain("Спасибо");
+		const no = await (await handlePoll(new Request(`${base}/p1/1`))).text();
+		expect(no).not.toContain("ABC123");
+		// Without the two properties the page is the plain one.
+		const plain = await (await handlePoll(new Request(`${await pollBase(x.id, luis.id)}/p1/0`))).text();
+		expect(plain).not.toContain("🎁");
 	});
 });
 

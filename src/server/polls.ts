@@ -139,12 +139,35 @@ const plain = (): Dress => ({
 	subscribe: false,
 });
 
+/** The page's own words, in the contact's `lang` property (en when it has none or another). */
+const WORDS = {
+	en: { pick: "Pick an answer.", thanks: "Thanks, your answer is in. Here's how everyone answered so far.", changed: "Changed your mind? Pick another answer.", gift: "Your gift", get: "Get it" },
+	ru: { pick: "Выберите ответ.", thanks: "Спасибо, ответ записан. Вот как ответили остальные.", changed: "Передумали? Выберите другой ответ.", gift: "Ваш подарок", get: "Получить" },
+	uk: { pick: "Оберіть відповідь.", thanks: "Дякуємо, відповідь записано. Ось як відповіли інші.", changed: "Передумали? Оберіть іншу відповідь.", gift: "Ваш подарунок", get: "Отримати" },
+};
+type Words = (typeof WORDS)["en"];
+const wordsFor = (lang: unknown): Words => WORDS[(String(lang ?? "").slice(0, 2) as keyof typeof WORDS)] ?? WORDS.en;
+
+/**
+ * A reward handed over on the spot to whoever picks the poll's FIRST answer ("yes"): the contact's
+ * `reward_code` property, with a button to `reward_url` (its {code} replaced). Contacts without
+ * the two properties see the plain results page. One code per contact, so it cannot be passed on.
+ */
+const rewardOf = (props: Record<string, unknown> | null | undefined, w: Words) => {
+	const code = typeof props?.reward_code === "string" ? props.reward_code : "";
+	const url = typeof props?.reward_url === "string" ? props.reward_url : "";
+	if (!code || !/^https:\/\//.test(url)) return "";
+	return `<div style="margin:0 0 20px;padding:18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;text-align:center"><p style="margin:0 0 6px;font-weight:700">🎁 ${esc(w.gift)}</p><p style="margin:0 0 12px;font:800 20px/1.2 Menlo,Consolas,monospace;letter-spacing:1px">${esc(code)}</p><a class="mrw-btn" href="${esc(url.replaceAll("{code}", encodeURIComponent(code)))}">${esc(w.get)}</a></div>`;
+};
+
 const results = (
 	p: { question: string; options: { label: string; votes: number }[]; total: number },
 	mine: number | null,
 	link: (i: number) => string | null,
+	w: Words = WORDS.en,
+	reward = "",
 ) =>
-	`<h1>${esc(p.question)}</h1><p>${mine === null ? "Pick an answer." : "Thanks, your answer is in. Here's how everyone answered so far."}</p><ol>${p.options
+	`${mine === 0 ? reward : ""}<h1>${esc(p.question)}</h1><p>${mine === null ? w.pick : w.thanks}</p><ol>${p.options
 		.map((o, i) => {
 			const pct = p.total ? Math.round((o.votes / p.total) * 100) : 0;
 			const inner = `<span class="bar" style="width:${mine === null ? 0 : pct}%"></span><span class="row"><span>${esc(o.label)}</span>${mine === null ? "" : `<span>${pct}%</span>`}</span>`;
@@ -153,7 +176,7 @@ const results = (
 		})
 		.join(
 			"",
-		)}</ol>${mine !== null ? '<p class="note">Changed your mind? Pick another answer.</p>' : ""}`;
+		)}</ol>${mine !== null ? `<p class="note">${esc(w.changed)}</p>` : ""}`;
 
 /** /poll/<broadcast>/<contact>/<signature>/<poll>/<answer>, and /poll/web/<broadcast> (the web version's). */
 export async function handlePoll(request: Request, now = Date.now()): Promise<Response> {
@@ -209,7 +232,7 @@ export async function handlePoll(request: Request, now = Date.now()): Promise<Re
 	const poll = pollsIn(x?.design).find((p) => p.id === pollId);
 	if (!x || !poll) return bad();
 	const contact = await db
-		.select({ id: schema.contacts.id })
+		.select({ id: schema.contacts.id, properties: schema.contacts.properties })
 		.from(schema.contacts)
 		.where(
 			and(
@@ -289,7 +312,7 @@ export async function handlePoll(request: Request, now = Date.now()): Promise<Re
 	return page(
 		d,
 		poll.question,
-		results(counted, mine, (i) => `${base}/${i}`),
+		results(counted, mine, (i) => `${base}/${i}`, wordsFor(contact.properties?.lang), rewardOf(contact.properties, wordsFor(contact.properties?.lang))),
 		200,
 		`<a class="back" href="${esc(issue)}">Read the issue online</a>`,
 	);
