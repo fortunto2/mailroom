@@ -480,6 +480,8 @@ describe("polls", () => {
 		await db.insert(schema.contacts).values(imported as never);
 		const theirs = await handlePoll(new Request(`${await pollBase(x.id, imported.id)}/p1/0`));
 		expect(theirs.status).toBe(200);
+		const after = await db.select().from(schema.contacts).where(eq(schema.contacts.id, imported.id)).get();
+		expect(after?.properties?.poll_p1).toBe("0");
 	});
 });
 

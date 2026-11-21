@@ -272,6 +272,14 @@ export async function handlePoll(request: Request, now = Date.now()): Promise<Re
 				set: { answer, created_at: iso(now) },
 			});
 		mine = answer;
+		// The answer also lands on the contact as `poll_<poll id>` = its index, so live segments
+		// ("said yes", "said no") and conditions can use it without reading poll_votes.
+		await db
+			.update(schema.contacts)
+			.set({
+				properties: sql`json_set(coalesce(${schema.contacts.properties}, '{}'), ${`$.poll_${poll.id}`}, ${String(answer)})`,
+			})
+			.where(eq(schema.contacts.id, contact.id));
 		if (before?.answer !== answer) {
 			const { recordEvent } = await import("./automations");
 			await recordEvent(
