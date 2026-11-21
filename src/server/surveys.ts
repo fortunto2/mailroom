@@ -563,7 +563,7 @@ export async function handleSurveyPage(request: Request, now = Date.now()): Prom
 	const u = new URL(request.url);
 	const post = request.method === "POST";
 	const m =
-		/^\/s\/(?:(c|v)\/([0-9a-f-]{36})\/([A-Za-z0-9_-]{10,40})\/|web\/)?(sv_[a-z0-9]{20})(?:\/(\d{1,2}))?\/?$/.exec(
+		/^\/s\/(?:(c|v)\/([A-Za-z0-9_-]{1,64})\/([A-Za-z0-9_-]{10,40})\/|web\/)?(sv_[a-z0-9]{20})(?:\/(\d{1,2}))?\/?$/.exec(
 			u.pathname,
 		);
 	if (!m) return missing();

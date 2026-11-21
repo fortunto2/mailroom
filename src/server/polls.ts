@@ -199,7 +199,7 @@ export async function handlePoll(request: Request, now = Date.now()): Promise<Re
 		);
 	}
 	const m =
-		/^\/poll\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/([A-Za-z0-9_-]{10,40})\/([\w-]{1,40})(?:\/(\d{1,2}))?$/.exec(
+		/^\/poll\/([0-9a-f-]{36})\/([A-Za-z0-9_-]{1,64})\/([A-Za-z0-9_-]{10,40})\/([\w-]{1,40})(?:\/(\d{1,2}))?$/.exec(
 			u.pathname,
 		);
 	const bad = () =>

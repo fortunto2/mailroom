@@ -473,6 +473,13 @@ describe("polls", () => {
 		// Without the two properties the page is the plain one.
 		const plain = await (await handlePoll(new Request(`${await pollBase(x.id, luis.id)}/p1/0`))).text();
 		expect(plain).not.toContain("🎁");
+
+		// Imported contacts keep ids of their own shape (ct_<hash>, not a UUID): their links work too.
+		const row = await db.select().from(schema.contacts).where(eq(schema.contacts.id, luis.id)).get();
+		const imported = { ...row, id: "ct_6c170714ca421eee3f48bcfd485d", email: "imported@example.com" };
+		await db.insert(schema.contacts).values(imported as never);
+		const theirs = await handlePoll(new Request(`${await pollBase(x.id, imported.id)}/p1/0`));
+		expect(theirs.status).toBe(200);
 	});
 });
 
