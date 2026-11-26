@@ -291,15 +291,19 @@ export async function applySesEvent(
 	if (status) set.status = advanceStatus(status);
 	// SES's id for an email whose send we never heard back from (it went after all).
 	if (e.mail?.messageId) set.message_id = sql`COALESCE(${em.message_id}, ${e.mail.messageId})`;
+	// SES's mailbox simulator answers with made-up bounces and complaints: those tests stay out of
+	// the counters, so the sending-limit alerts show what real recipients did.
+	const simulated = JSON.stringify(email.to ?? "").toLowerCase().includes("@simulator.amazonses.com");
+	const count: typeof bump = (...a) => (simulated ? [] : bump(...a));
 	const queries: Parameters<typeof batch>[0] = [];
 	switch (kind) {
 		case "Send":
 			set.sent_at = sql`COALESCE(${em.sent_at}, ${at})`;
-			queries.push(...bump(org, day, from, "sent"));
+			queries.push(...count(org, day, from, "sent"));
 			break;
 		case "Delivery":
 			set.delivered_at = sql`COALESCE(${em.delivered_at}, ${at})`;
-			queries.push(...bump(org, day, from, "delivered"));
+			queries.push(...count(org, day, from, "delivered"));
 			// The shared mailbox-check cache is everyone's: only the deployment's own SES account
 			// writes to it (an organization's own account's topic is theirs to send to), and only
 			// for addresses this email went to.
@@ -320,7 +324,7 @@ export async function applySesEvent(
 			}
 			break;
 		case "DeliveryDelay":
-			queries.push(...bump(org, day, from, "delayed"));
+			queries.push(...count(org, day, from, "delayed"));
 			break;
 		case "Bounce": {
 			const hard = e.bounce?.bounceType === "Permanent";
@@ -329,7 +333,7 @@ export async function applySesEvent(
 			set.error =
 				((data.bounce as { message?: string }).message || null)?.slice(0, 500) ?? null;
 			queries.push(
-				...bump(
+				...count(
 					org,
 					day,
 					from,
@@ -360,7 +364,7 @@ export async function applySesEvent(
 		}
 		case "Complaint":
 			set.complained_at = sql`COALESCE(${em.complained_at}, ${at})`;
-			queries.push(...bump(org, day, from, "complained"));
+			queries.push(...count(org, day, from, "complained"));
 			for (const r of e.complaint?.complainedRecipients ?? [])
 				if (r.emailAddress)
 					queries.push(
@@ -379,14 +383,14 @@ export async function applySesEvent(
 			break;
 		case "Open":
 			queries.push(
-				...bump(org, day, from, "opened", { emailId: email.id, column: "opened_at" }),
+				...count(org, day, from, "opened", { emailId: email.id, column: "opened_at" }),
 			);
 			set.opened_at = sql`COALESCE(${em.opened_at}, ${at})`;
 			set.open_count = sql`${em.open_count} + 1`;
 			break;
 		case "Click":
 			queries.push(
-				...bump(org, day, from, "clicked", { emailId: email.id, column: "clicked_at" }),
+				...count(org, day, from, "clicked", { emailId: email.id, column: "clicked_at" }),
 			);
 			set.clicked_at = sql`COALESCE(${em.clicked_at}, ${at})`;
 			set.click_count = sql`${em.click_count} + 1`;
@@ -394,7 +398,7 @@ export async function applySesEvent(
 		case "Reject":
 		case "RenderingFailure":
 			set.error = String((data.failed as { reason?: string }).reason ?? kind).slice(0, 500);
-			queries.push(...bump(org, day, from, "failed"));
+			queries.push(...count(org, day, from, "failed"));
 			break;
 	}
 	// By mailbox provider (Gmail, Outlook…), from the event's first recipient.
