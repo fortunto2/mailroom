@@ -196,6 +196,9 @@ export async function rulesFor(m: Incoming) {
 			matches(rule, { to: x, from: m.from, subject: m.subject }),
 		);
 		if (!to) continue;
+		// The person a rule forwards to, answering the copy (reply-all keeps this address): not sent back to them.
+		if (rule.action === "forward" && (rule.forward_to ?? []).some((a) => a.toLowerCase() === bareAddress(m.from).toLowerCase()))
+			continue;
 		out.push({ rule, to });
 		if (!rule.continue) break;
 	}
@@ -251,7 +254,8 @@ export async function forward(m: Incoming, rule: InboundRule, to: string, receiv
 	const input = parseSend({
 		from: `"${name} via Mailroom" <${fromAddress}>`,
 		to: rule.forward_to ?? [],
-		reply_to: m.replyTo?.length ? m.replyTo : [m.from],
+		// The sender, and the address it came to: answering the copy reaches both, so Mailroom keeps the thread.
+		reply_to: [...(m.replyTo?.length ? m.replyTo : [m.from]), to],
 		subject: m.subject || "(no subject)",
 		...(m.parsed?.html ? { html: m.parsed.html } : {}),
 		text: text.trim() ? text : "(no text)",

@@ -777,7 +777,7 @@ describe("inbound rules and replies", () => {
 		expect(copy).toMatchObject({
 			from: `"Ana Guest via Mailroom" <${to}>`,
 			to: ["desk@staff.test", "manager@staff.test"],
-			reply_to: ["Ana Guest <ana@guest.test>"],
+			reply_to: ["Ana Guest <ana@guest.test>", to],
 			subject: "Booking question",
 			source: "system",
 		});
